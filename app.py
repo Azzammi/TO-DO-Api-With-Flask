@@ -1,77 +1,139 @@
 from flask import Flask, request, jsonify, make_response
+from datetime import datetime
 from flask_restful import Resource, Api
-from flask_sqlalchemy import SQLAlchemy
 
 # Buat flask instance
 app = Flask(__name__)
 # API object
 api = Api(app)
-# Database
-app.config['SQLALCHEMY_DATABASE_URI']  = 'sqlite:///emp.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# ORM
-db = SQLAlchemy(app)
 
-class Employee(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    firstname = db.Column(db.String(80), nullable=False)
-    lastname = db.Column(db.String(80), nullable=False)
-    gender = db.Column(db.String(80), nullable=False)
-    salary = db.Column(db.Float)
+todos = []
+format_data = "%d-%m-%Y %H:%M:%S"
 
-    def __repr__(self) -> str:
-        return f"{self.firstname} - {self.lastname} - {self.gender} - {self.salary}"
-
-class GetEmployee(Resource):
+class GetTodos(Resource):
     def get(self):
-        employees = Employee.query.all();
-        emp_list = []
-        for emp in employees:
-            emp_data = {'Id': emp.id, 'Firstname': emp.firstname, 'Lasname':emp.lastname,'Gender': emp.gender,'Salary':emp.salary}
-            emp_list.append(emp_data)
-        return {'Employees': emp_list}, 200
+        if len(todos) == 0:
+            return {'Error' : 'Todos Not Found'}, 404
 
-class AddEmployee(Resource):
+        return {'data':todos}, 200
+
+class AddTodo(Resource):
     def post(self):
         if request.is_json:
-            emp = Employee(firstname=request.json['FirstName'], lastname=request.json['LastName'], gender=request.json['Gender'], salary=request.json['Salary'])
-            db.session.add(emp)
-            db.session.commit()
+            id = len(todos) + 1
+            title = request.json['title']
+            description = request.json['description']
+            created_at = datetime.now().strftime(format_data)
 
-            return make_response(jsonify({'Id': emp.id, 'First Name': emp.firstname, 'Last Name': emp.lastname, 'gender': emp.gender, 'salary': emp.salary}))
+            todo = {'Id': id, 
+            'title': title, 
+            'description': description,
+            'created_at': created_at,
+            'updated_at': '',
+            'finished_at': '',
+            'deleted_at': ''}
+            todos.append(todo)
+
+            return make_response({'data': todo,'message': 'Todo successfully created'})
 
         else:
-            return {'error': 'Request must be JSON'}, 402
+            return {'error': 'Request must be JSON'}, 400
 
-class UpdateEmployee(Resource):
+class GetTodoById(Resource):
+    def get(self, id):
+        if len(todos) == 0:
+            return {'Error': "Todo Not Found"}, 404
+        
+        index = 0
+        while index < len(todos):
+            dictionary = todos[index]
+            if dictionary['Id'] == id:
+                return {'data': dictionary}
+            index += 1
+
+        return {'Error': "Todo Not Found"}, 404
+
+class UpdateTodo(Resource):
     def put(self, id):
-        if request.is_json:
-            emp = Employee.query.get(id)
-            if emp is None:
-                return {'error': 'not found'},404
-            
-            emp.firstname = request.json['FirstName']
-            emp.lastname  = request.json['LastName']
-            emp.gender = request.json['Gender']
-            emp.salary = request.json['Salary']
-            db.session.commit()
-            return 'Updated', 200 
-        else:
+        if len(todos) == 0:
+            return {'Error': "Todo Not Found"}, 404
+        
+        if request.is_json != True:
             return {'error': 'Request must be JSON'}, 402
+        
+        index = 0
+        index_of_data = 0
+        data = []
+        while index < len(todos):
+            dictionary = todos[index]
+            if dictionary['Id'] == id:
+                index_of_data = index
+                data = dictionary
+            index += 1
 
-class DeleteEmployee(Resource):
+        if len(data) == 0:
+            return {'Error': "Todo Not Found"}, 404
+
+        data['title'] = request.json['title']
+        data['description'] = request.json['description']
+        data['updated_at'] = datetime.now().strftime(format_data)
+        todos[index_of_data] = data
+
+        return {'message': "Todo has been updated"}, 200
+
+class FinishTodo(Resource):
+    def post(self,id):
+        if len(todos) == 0:
+            return {'Error': "Todo Not Found"}, 404
+      
+        index = 0
+        index_of_data = 0
+        data = []
+        while index < len(todos):
+            dictionary = todos[index]
+            if dictionary['Id'] == id:
+                index_of_data = index
+                data = dictionary
+            index += 1
+
+        if len(data) == 0:
+            return {'Error': "Todo Not Found"}, 404
+
+        data['finished_at'] = datetime.now().strftime(format_data)
+        todos[index_of_data] = data
+
+        return {'message': "Todo Finished"}, 200
+
+class DeleteTodo(Resource):
     def delete(self,id):
-        emp = Employee.query.get(id)
-        if emp is None:
-            return {'error': 'Not Found'},404
-        db.session.delete(emp)
-        db.session.commit()
-        return f'{id} is deleted', 200
+        if len(todos) == 0:
+            return {'Error': "Todo Not Found"}, 404
+      
+        index = 0
+        index_of_data = 0
+        data = []
+        while index < len(todos):
+            dictionary = todos[index]
+            if dictionary['Id'] == id:
+                index_of_data = index
+                data = dictionary
+            index += 1
 
-api.add_resource(GetEmployee, '/employee')
-api.add_resource(AddEmployee, '/employee')
-api.add_resource(UpdateEmployee, '/employee/<int:id>')
-api.add_resource(DeleteEmployee, '/employee/<int:id>')
+        if len(data) == 0:
+            return {'Error': "Todo Not Found"}, 404
+
+        # todos.pop(index_of_data)
+        data['deleted_at'] = datetime.now().strftime(format_data)
+        todos[index_of_data] = data
+
+        return {'message': "Todo Deleted"}, 200
+
+api.add_resource(GetTodos, '/')
+api.add_resource(AddTodo, '/')
+api.add_resource(GetTodoById,'/<int:id>')
+api.add_resource(UpdateTodo,'/<int:id>')
+api.add_resource(FinishTodo,'/<int:id>/finish')
+api.add_resource(DeleteTodo,'/<int:id>')
 
 if __name__ == '__main__':
     app.run(debug=True)
